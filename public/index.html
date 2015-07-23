@@ -1,1 +1,220 @@
 <h1>Bots</h1>
+
+<canvas id="cnv" width=300 height=200></canvas>
+<script>
+logLevel = 1
+
+var ws = new WebSocket("ws://"+document.location.host+"/ws")
+ws.onopen = function() {
+	console.log("Connected")
+}
+
+defaultNetLatency = -200
+
+target = null
+
+entities = {}
+ws.onmessage = function(data) {
+	cmd = JSON.parse(data.data);
+	if (logLevel>1) console.log(cmd);
+	switch (cmd[0]) {
+		case "NEW":
+			switch (cmd[2]) {
+				case "PLAYER":
+				console.log("Creating entity", cmd[1]) 
+				entities[cmd[1]] = {
+					lastUp:(new Date()),id:cmd[1],
+					xspeed:0, yspeed:0, x:0,y:0,
+					render:renderPlayer,latency:defaultNetLatency,snaps:[]}
+				break;
+				default:
+				console.log("Unknown type", cmd[2]);
+				break
+			}
+		break;
+		case "DUMP":
+			entities[cmd[1]].snaps.push( {
+				x: cmd[3], y: cmd[4], xspeed: cmd[5], yspeed: cmd[6], time: (new Date()) } )
+			dropOldSnaps(entities[cmd[1]])
+		break;
+		case "CONTROL":
+			console.log("Controlling entity", cmd[1])
+			target = entities[cmd[1]]
+			target.latency = 0
+		break;
+		case "MOVE":
+			when = (new Date())
+			when.setTime(when.getTime()-cmd[1])
+			entities[cmd[2]].snaps.push( {
+				x: cmd[3], y: cmd[4], xspeed:cmd[5], yspeed:cmd[6], time: when } )
+			dropOldSnaps(entities[cmd[2]])
+		break;
+		case "PING":
+			ws.send(JSON.stringify(["PONG"]))
+		break
+		case "SAY":
+		break;
+		case "DEL":
+			delete entities[cmd[1]];
+		break;
+	}
+}
+function lerp(a,b,r) { return a+(b-a)*r }
+
+
+function dropOldSnaps(ent) {
+	if (ent.snaps.length<1) {
+		return
+	}
+
+	osnaps = JSON.stringify(ent.snaps)
+	origLen = ent.snaps.length
+	when = (new Date())
+	when.setTime(when.getTime()+ent.latency)
+	try {
+		for(var i=0; i<ent.snaps.length; i+=1) {
+			if (ent.snaps[i].time>=when) break
+		}
+		if (i>1) ent.snaps.splice(0,i-1)
+	} catch (e) {
+		console.log("Bad snaps for", ent.id, osnaps, e)
+	}
+	ent.lastUp = when
+}
+
+function getEntityPosition(ent) {
+	if (ent.snaps.length==0) {
+		ent.x = 0
+		ent.y = 0
+		return
+	}
+
+	lastTime = ent.snaps[0].time
+	targetTime = new Date()
+	targetTime.setTime(targetTime.getTime()+ent.latency)
+	for(var i=0; i<ent.snaps.length; i+=1) {
+		if (ent.snaps[i].time>=targetTime) break
+	}
+	if (i>1) ent.snaps.splice(0,i-1)
+	a = ent.snaps[0]
+
+	age = (targetTime - a.time)
+
+	if (logLevel>3) console.log(ent.id, "LAT",ent.latency,"OLDT", +lastTime, "EFFT", +targetTime, "USET", +a.time, "DIFF", age)
+	//if (ratio>1) { ratio = 1 }
+	ent.x = a.x+a.xspeed*age
+	ent.y = a.y+a.yspeed*age
+}
+
+function renderPlayer(player, ctx) {
+	getEntityPosition(player)
+	ctx.fillStyle="orange";
+	ctx.fillRect(player.x-3,player.y-3,6, 6);
+}
+function render() {
+	var canvas = document.getElementById('cnv');
+	ctx = canvas.getContext('2d');
+	ctx.fillStyle="blue";
+	ctx.fillRect(0,0,canvas.width,canvas.height);
+	for (var key in entities) {
+	  if (entities.hasOwnProperty(key)) {
+	    entities[key].render(entities[key], ctx)
+	  }
+	}
+}
+
+keys = {up:false,down:false,left:false,right:false}
+
+function logic() {
+	if (target!=null) {
+		getEntityPosition(target)
+		speed = .2
+		oldX = target.x
+		oldY = target.y
+		oldXspeed = target.xspeed
+		oldYspeed = target.yspeed
+		target.xspeed *= .1
+		target.yspeed *= .1
+		if (Math.abs(target.xspeed)<.01) target.xspeed=0
+		if (Math.abs(target.yspeed)<.01) target.yspeed=0
+		if (keys.up>0) target.yspeed = -speed
+		if (keys.down>0) target.yspeed = speed
+		if (keys.left>0) target.xspeed = -speed
+		if (keys.right>0) target.xspeed = speed
+		var canvas = document.getElementById('cnv');
+
+		if (target.x<3) {
+			target.x=3 
+			target.xspeed = 0
+		}
+		if (target.x>canvas.width-3) {
+			target.x = canvas.width-3
+			target.xspeed = 0
+		}
+		if (target.y<3) {
+			target.y=3
+			target.yspeed = 0
+		}
+		if (target.y>canvas.height-3) {
+			target.y = canvas.height-3
+			target.yspeed = 0
+		}
+		if (target.x!=oldX || target.y!=oldY || target.xspeed!=oldXspeed || target.yspeed!=oldYspeed) {
+			target.snaps.push( {
+				x: target.x, y: target.y, xspeed: target.xspeed, yspeed: target.yspeed, time: (new Date()) } )
+			dropOldSnaps(target)
+			dat = ["MOVE",target.x,target.y,target.xspeed, target.yspeed]
+		// console.log("Sending", dat)
+			ws.send(JSON.stringify(dat))
+			console.log(target.lastUp, JSON.stringify(target.snaps))
+		}
+	}
+
+	if (keys.up==1) {
+		keys.up = 0
+	}
+	if (keys.down==1) {
+		keys.down = 0
+	}
+	if (keys.left==1) {
+		keys.left = 0
+	}
+	if (keys.right==1) {
+		keys.right = 0
+	}
+
+}
+setInterval(logic,20);
+
+document.onkeydown = function(evt) {
+    evt = evt || window.event;
+	console.log(evt.keyCode);
+    switch (evt.keyCode){
+    	case 37: case 65: keys.left = 2; break;
+    	case 39: case 68: keys.right = 2; break;
+    	case 38: case 87: keys.up = 2; break;
+    	case 40: case 83: keys.down = 2; break;
+    	default: return true;
+    }
+    return false;
+};
+
+document.onkeyup = function(evt) {
+    evt = evt || window.event;
+	console.log(evt.keyCode);
+    switch (evt.keyCode){
+    	case 37: case 65: keys.left = 1; break;
+    	case 39: case 68: keys.right = 1; break;
+    	case 38: case 87: keys.up = 1; break;
+    	case 40: case 83: keys.down = 1; break;
+    	default: return true;
+    }
+    return false;
+};
+
+(function animloop(){
+  window.requestAnimationFrame(animloop);
+  render();
+})();
+
+</script>
