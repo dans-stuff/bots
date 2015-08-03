@@ -1,7 +1,41 @@
 <h1>Bots</h1>
 
-<canvas id="cnv" width=300 height=200></canvas>
+<script src="three.js"></script>
 <script>
+
+
+
+var scene = new THREE.Scene();
+
+var renderer = new THREE.WebGLRenderer();
+
+canvasW = 720
+canvasH = 405
+
+renderer.setSize( canvasW, canvasH );
+document.body.appendChild( renderer.domElement );
+
+var camera = new THREE.PerspectiveCamera( 75, renderer.domElement.width/renderer.domElement.height, 0.1, 1000 );
+
+var texture = THREE.ImageUtils.loadTexture( "img/grass.png" );
+texture.wrapS = THREE.RepeatWrapping;
+texture.wrapT = THREE.RepeatWrapping;
+texture.repeat.set( 10, 10 );
+
+var geoPlayer = new THREE.BoxGeometry( 6, 6, 6 );
+var matOtherPlayer = new THREE.MeshBasicMaterial( { color: 0x222299 } );
+var matPlayer = new THREE.MeshBasicMaterial( { color: 0x0000ff } );
+var geoFloor = new THREE.PlaneGeometry( -canvasW, canvasH, 30, 20 );
+var matFloor = new THREE.MeshBasicMaterial( { map: texture } );
+
+
+
+camera.up.set(0,0,-1)
+scene.add(camera)
+floor = new THREE.Mesh( geoFloor, matFloor)
+floor.position.set(canvasW/2,canvasH/2,0)
+scene.add(floor)
+
 speed = 4
 friction = 0
 logLevel = 1
@@ -21,12 +55,16 @@ ws.onmessage = function(data) {
 		case "NEW":
 			switch (cmd[2]) {
 				case "PLAYER":
-				console.log("Creating entity", cmd[1]) 
-				entities[cmd[1]] = {
+				newEnt = {
+					body:new THREE.Mesh( geoPlayer, matOtherPlayer ),
 					id:cmd[1],
 					xspeed:0, yspeed:0, x:0,y:0,
 					step:stepPlayer,
 					render:renderOtherPlayer}
+				entities[cmd[1]] = newEnt
+				console.log("Creating entity", newEnt) 
+
+				scene.add(entities[cmd[1]].body);
 				break;
 				default:
 				console.log("Unknown type", cmd[2]);
@@ -36,7 +74,11 @@ ws.onmessage = function(data) {
 		case "CONTROL":
 			console.log("Controlling entity", cmd[1])
 			targetId = cmd[1]
-			entities[targetId].render = renderPlayer
+			ent = entities[targetId]
+			ent.render = renderPlayer
+			scene.remove(ent.body);
+			ent.body = new THREE.Mesh( geoPlayer, matPlayer )
+			scene.add(ent.body);
 		break;
 		case "MOVE":
 			e = entities[cmd[1]]
@@ -53,30 +95,36 @@ ws.onmessage = function(data) {
 		case "SAY":
 		break;
 		case "DEL":
+			scene.remove(cmd[1].body);
 			delete entities[cmd[1]];
 		break;
 	}
 }
 function lerp(a,b,r) { return a+(b-a)*r }
 
-function renderOtherPlayer(player, ctx, ratio) {
+function renderOtherPlayer(player, ratio) {
 	x = player.x - player.xspeed + player.xspeed * ratio
 	y = player.y - player.yspeed + player.yspeed * ratio
-	ctx.fillStyle="orange";
-	ctx.fillRect(x-3,y-3,6, 6);
+	player.body.position.x = x
+	player.body.position.y = y
+	player.body.position.z = -3
 }
-function renderPlayer(player, ctx, ratio) {
+function renderPlayer(player, ratio) {
 	x = player.x - player.xspeed + player.xspeed * ratio
 	y = player.y - player.yspeed + player.yspeed * ratio
-	ctx.fillStyle="blue";
-	ctx.fillRect(x-4,y-4,8, 8);
+	player.body.position.x = x
+	player.body.position.y = y
+	player.body.position.z = -3
+	camera.position.x = (camera.position.x*2+player.body.position.x)/3
+	camera.position.y = (camera.position.y*2+player.body.position.y+30)/3
+	camera.lookAt(player.body.position);
 }
 
 function stepPlayer(player) {
 	player.x += player.xspeed
 	player.y += player.yspeed
 
-	var canvas = document.getElementById('cnv');
+	canvas = renderer.domElement;
 	if (target.x<3) {
 		target.x=3 
 		target.xspeed = 0
@@ -96,22 +144,20 @@ function stepPlayer(player) {
 }
 
 lastLogic = (new Date())
+renderStep = 0
 function render() {
+	renderStep += 1
+	camera.position.z = -50;
+
 	lerpAmount = ((new Date())-lastLogic)/40
-	var canvas = document.getElementById('cnv');
-	ctx = canvas.getContext('2d');
-
-	ctx.fillStyle="white";
-	ctx.fillRect(0,0,canvas.width,canvas.height);
-	ctx.strokeStyle="black";
-	ctx.strokeRect(0,0,canvas.width,canvas.height);
-
 
 	for (var key in entities) {
 	  if (entities.hasOwnProperty(key)) {
-	    entities[key].render(entities[key], ctx, lerpAmount)
+	    entities[key].render(entities[key], lerpAmount)
 	  }
 	}
+
+	renderer.render(scene, camera);
 }
 
 keys = {up:false,down:false,left:false,right:false}

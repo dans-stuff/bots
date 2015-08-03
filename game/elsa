@@ -1,0 +1,14 @@
+lowerbound, upperbound -> anything
+	loopStep ->
+		0 @ int
+	bool(true) -> loopStep
+		int @ anything
+		int += 1
+		int == 100 @ loopStep
+	true @ loopStep
+
+int -> fizzbuzz
+	if int % 15 "fizzbuzz" @ stdout
+	elif int % 5 "buzz" @ stdout
+	elif int % 5 "fizz" @ stdout
+0 lowerbound, 100 upperbound @ fizzbuzz
