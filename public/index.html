@@ -1,8 +1,273 @@
-<h1>Bots</h1>
-
+<body style='padding:0;margin:0'>
 <script src="three.js"></script>
 <script>
 
+level = []
+worldW = 30
+worldH = 10
+worldD = 30
+
+var playerSize = .5
+
+window.addEventListener( 'resize', onWindowResize, false );
+
+function onWindowResize(){
+
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+
+    renderer.setSize( window.innerWidth, window.innerHeight );
+
+}
+
+speed = .2
+gravity = -.05
+friction = 0
+logLevel = 1
+jumpHeight = .32
+
+var geoLevel;
+function renderWorldEfficient() {
+	geoLevel = new THREE.Geometry()
+	for (x=0;x<worldW;x+=1) {
+		for (y=0; y<worldH; y+=1) {
+			for (z=0; z<worldD; z+=1) {
+				if (level[x][y][z] == 1) {
+					box = new THREE.BoxGeometry(1,1,1)
+					box.applyMatrix( new THREE.Matrix4().makeTranslation(x*1+.5, y*1+.5, z*1+.5) );
+					geoLevel.merge(box)
+				}
+			}
+		}
+	}
+	floor = new THREE.Mesh( geoLevel, materialWorld)
+	scene.add(floor)
+}
+
+uvSize = .5
+uvBuffer = 1/64
+uvOffs = {"grass":[0,.5],"grassSide":[.5,0],"metal":[.5,.5],"dirt":[0,0]}
+uvVecs = {}
+for (i in uvOffs) {
+	start = uvOffs[i]
+	newVecs = {
+		"tl":new THREE.Vector2(start[0]+uvBuffer,start[1]+uvSize-uvBuffer),
+		"tr":new THREE.Vector2(start[0]-uvBuffer+uvSize,start[1]+uvSize-uvBuffer),
+		"bl":new THREE.Vector2(start[0]+uvBuffer,start[1]+uvBuffer),
+		"br":new THREE.Vector2(start[0]-uvBuffer+uvSize,start[1]+uvBuffer)
+	}
+	uvVecs[i] = newVecs
+}
+
+lumMedium = new THREE.Color( 0x777777 );
+lumLow = new THREE.Color( 0x444444 );
+lumHigh = new THREE.Color( 0xcccccc );
+lumMax = new THREE.Color( 0xffffff );
+
+// lumMedium = new THREE.Color( 0x222222 );
+// lumLow = new THREE.Color( 0x222222 );
+// lumHigh = new THREE.Color( 0x222222 );
+// lumMax = new THREE.Color( 0x222222 );
+
+function renderWorld() {
+	geoLevel = new THREE.Geometry()
+	west = new THREE.Vector3( 1, 0, 0 );
+	east = new THREE.Vector3( -1, 0, 0 );
+	north = new THREE.Vector3( 0, 0, 1 );
+	south = new THREE.Vector3( 0, 0, -1 );
+	bottom = new THREE.Vector3( 0, 1, 0 );
+	top = new THREE.Vector3( 0, -1, 0 );
+	
+	for (x=0;x<worldW;x+=1) {
+		for (y=0; y<worldH; y+=1) {
+			for (z=0; z<worldD; z+=1) {
+				if (level[x][y][z] > 0) {
+					if (level[x][y][z]==1) {
+						blockTop="metal"
+						blockSide="metal"
+					}
+					if (level[x][y][z]==2) {
+						blockTop="grass"
+						blockSide="grassSide"
+					}
+					if (x==0 || level[x-1][y][z]==0) {
+						pos = geoLevel.vertices.length
+						geoLevel.vertices.push(
+							new THREE.Vector3(x,y,z),
+							new THREE.Vector3(x,y+1,z),
+							new THREE.Vector3(x,y,z+1),
+							new THREE.Vector3(x,y+1,z+1));
+						
+						face = new THREE.Face3(pos, pos+2, pos+1)
+						face.color = lumMedium
+						face.normal.copy(west)
+						geoLevel.faces.push(face);
+						geoLevel.faceVertexUvs[0].push([
+							uvVecs[blockSide]["tl"],
+							uvVecs[blockSide]["tr"],
+							uvVecs[blockSide]["bl"]]);
+
+						face = new THREE.Face3(pos+1, pos+2, pos+3)
+						face.color = lumMedium
+						face.normal.copy(west)
+						geoLevel.faces.push(face);
+						geoLevel.faceVertexUvs[0].push([
+							uvVecs[blockSide]["bl"],
+							uvVecs[blockSide]["tr"],
+							uvVecs[blockSide]["br"]]);
+
+						// make west face
+					}
+					if (z==0 || level[x][y][z-1]==0) {
+						pos = geoLevel.vertices.length
+						geoLevel.vertices.push(
+							new THREE.Vector3(x+1,y,z),
+							new THREE.Vector3(x+1,y+1,z),
+							new THREE.Vector3(x,y,z),
+							new THREE.Vector3(x,y+1,z));
+						
+						face = new THREE.Face3(pos, pos+2, pos+1)
+						face.color = lumLow
+						face.normal.copy(north)
+						geoLevel.faces.push(face);
+						geoLevel.faceVertexUvs[0].push([
+							uvVecs[blockSide]["bl"],
+							uvVecs[blockSide]["br"],
+							uvVecs[blockSide]["tl"]]);
+
+						face = new THREE.Face3(pos+1, pos+2, pos+3)
+						face.color = lumLow
+						face.normal.copy(north)
+						geoLevel.faces.push(face);
+						geoLevel.faceVertexUvs[0].push([
+							uvVecs[blockSide]["tl"],
+							uvVecs[blockSide]["br"],
+							uvVecs[blockSide]["tr"]]);
+
+
+						// make north face
+					}
+					if (y==0 || level[x][y-1][z]==0) {
+
+						pos = geoLevel.vertices.length
+						geoLevel.vertices.push(
+							new THREE.Vector3(x,y,z),
+							new THREE.Vector3(x,y,z+1),
+							new THREE.Vector3(x+1,y,z),
+							new THREE.Vector3(x+1,y,z+1));
+						
+						face = new THREE.Face3(pos+1, pos, pos+2)
+						face.color = lumLow
+						face.normal.copy(bottom)
+						geoLevel.faces.push(face);
+						geoLevel.faceVertexUvs[0].push([
+							uvVecs[blockSide]["tr"],
+							uvVecs[blockSide]["br"],
+							uvVecs[blockSide]["bl"]]);
+
+						face = new THREE.Face3(pos+3, pos+1, pos+2)
+						face.color = lumLow
+						face.normal.copy(bottom)
+						geoLevel.faces.push(face);
+						geoLevel.faceVertexUvs[0].push([
+							uvVecs[blockSide]["tr"],
+							uvVecs[blockSide]["tl"],
+							uvVecs[blockSide]["bl"]]);
+
+						// make bottom face
+					}
+					if (x==worldW-1 || level[x+1][y][z]==0) {
+
+						pos = geoLevel.vertices.length
+						geoLevel.vertices.push(
+							new THREE.Vector3(x+1,y,z),
+							new THREE.Vector3(x+1,y+1,z),
+							new THREE.Vector3(x+1,y,z+1),
+							new THREE.Vector3(x+1,y+1,z+1));
+						
+						face = new THREE.Face3(pos+2, pos, pos+1)
+						face.color = lumMedium
+						face.normal.copy(east)
+						geoLevel.faces.push(face);
+						geoLevel.faceVertexUvs[0].push([
+							uvVecs[blockSide]["bl"],
+							uvVecs[blockSide]["br"],
+							uvVecs[blockSide]["tr"]]);
+
+						face = new THREE.Face3(pos+2, pos+1, pos+3)
+						face.color = lumMedium
+						face.normal.copy(east)
+						geoLevel.faces.push(face);
+						geoLevel.faceVertexUvs[0].push([
+							uvVecs[blockSide]["bl"],
+							uvVecs[blockSide]["tr"],
+							uvVecs[blockSide]["tl"]]);
+
+						// make east face
+					}
+					if (z==worldD-1 || level[x][y][z+1]==0) {
+						pos = geoLevel.vertices.length
+						geoLevel.vertices.push(
+							new THREE.Vector3(x+1,y,z+1),
+							new THREE.Vector3(x+1,y+1,z+1),
+							new THREE.Vector3(x,y,z+1),
+							new THREE.Vector3(x,y+1,z+1));
+						
+						face = new THREE.Face3(pos+2, pos, pos+1)
+						face.color = lumHigh
+						face.normal.copy(south)
+						geoLevel.faces.push(face);
+						geoLevel.faceVertexUvs[0].push([
+							uvVecs[blockSide]["br"],
+							uvVecs[blockSide]["bl"],
+							uvVecs[blockSide]["tl"]]);
+
+						face = new THREE.Face3(pos+2, pos+1, pos+3)
+						face.color = lumHigh
+						face.normal.copy(south)
+						geoLevel.faces.push(face);
+						geoLevel.faceVertexUvs[0].push([
+							uvVecs[blockSide]["br"],
+							uvVecs[blockSide]["tl"],
+							uvVecs[blockSide]["tr"]]);
+						// make south face
+					}
+					
+					if (y==worldH-1 || level[x][y+1][z]==0) {
+						pos = geoLevel.vertices.length
+						geoLevel.vertices.push(
+							new THREE.Vector3(x,y+1,z),
+							new THREE.Vector3(x,y+1,z+1),
+							new THREE.Vector3(x+1,y+1,z),
+							new THREE.Vector3(x+1,y+1,z+1));
+						
+						face = new THREE.Face3(pos, pos+1, pos+2)
+						face.color = lumMax
+						face.normal.copy(top)
+						geoLevel.faces.push(face);
+						geoLevel.faceVertexUvs[0].push([
+							uvVecs[blockTop]["bl"],
+							uvVecs[blockTop]["tl"],
+							uvVecs[blockTop]["br"]]);
+
+						face = new THREE.Face3(pos+1, pos+3, pos+2)
+						face.color = lumMax
+						face.normal.copy(top)
+						geoLevel.faces.push(face);
+						geoLevel.faceVertexUvs[0].push([
+							uvVecs[blockTop]["tl"],
+							uvVecs[blockTop]["tr"],
+							uvVecs[blockTop]["br"]]);
+
+						// make top face
+					}
+				}
+			}
+		}
+	}
+	floor = new THREE.Mesh( geoLevel, materialWorld)
+	scene.add(floor)
+}
 
 
 var scene = new THREE.Scene();
@@ -15,30 +280,34 @@ canvasH = 405
 renderer.setSize( canvasW, canvasH );
 document.body.appendChild( renderer.domElement );
 
-var camera = new THREE.PerspectiveCamera( 75, renderer.domElement.width/renderer.domElement.height, 0.1, 1000 );
+var camera = new THREE.PerspectiveCamera( 75, canvasW/canvasH, 0.1, 1000 );
 
-var texture = THREE.ImageUtils.loadTexture( "img/grass.png" );
-texture.wrapS = THREE.RepeatWrapping;
-texture.wrapT = THREE.RepeatWrapping;
-texture.repeat.set( 10, 10 );
+var texWorld = THREE.ImageUtils.loadTexture( "img/textures.png" );
 
-var geoPlayer = new THREE.BoxGeometry( 6, 6, 6 );
-var matOtherPlayer = new THREE.MeshBasicMaterial( { color: 0x222299 } );
-var matPlayer = new THREE.MeshBasicMaterial( { color: 0x0000ff } );
-var geoFloor = new THREE.PlaneGeometry( -canvasW, canvasH, 30, 20 );
-var matFloor = new THREE.MeshBasicMaterial( { map: texture } );
+var geoPlayer = new THREE.BoxGeometry( playerSize, playerSize, playerSize );
+onWindowResize()
 
 
 
-camera.up.set(0,0,-1)
+
+
+var matOtherPlayer = new THREE.MeshLambertMaterial( { color: 0x222299 } );
+var matPlayer = new THREE.MeshLambertMaterial( { color: 0x0000ff } );
+var geoFloor = new THREE.PlaneGeometry( canvasW, canvasH, 30, 20 );
+var materialWorld = new THREE.MeshLambertMaterial( { map: texWorld, vertexColors: THREE.VertexColors } );
+
+
 scene.add(camera)
-floor = new THREE.Mesh( geoFloor, matFloor)
-floor.position.set(canvasW/2,canvasH/2,0)
-scene.add(floor)
 
-speed = 4
-friction = 0
-logLevel = 1
+
+var directionalLight = new THREE.DirectionalLight( 0xffffff, 1 );
+directionalLight.position.set( worldW/2, 1000, worldD/2 );
+directionalLight.lookAt( worldW/2, 0, worldD/2 )
+scene.add( directionalLight );
+
+var light = new THREE.AmbientLight( 0xD0D0D0 ); // soft white light
+scene.add( light );
+
 
 var ws = new WebSocket("ws://"+document.location.host+"/ws")
 ws.onopen = function() {
@@ -58,7 +327,9 @@ ws.onmessage = function(data) {
 				newEnt = {
 					body:new THREE.Mesh( geoPlayer, matOtherPlayer ),
 					id:cmd[1],
-					xspeed:0, yspeed:0, x:0,y:0,
+					xspeed:0, yspeed:0, zspeed:0, 
+					x:10,y:20,z:20,
+					grounded: false,
 					step:stepPlayer,
 					render:renderOtherPlayer}
 				entities[cmd[1]] = newEnt
@@ -71,6 +342,10 @@ ws.onmessage = function(data) {
 				break
 			}
 		break;
+		case "WORLD":
+			level = cmd[1];
+			renderWorld();
+			break
 		case "CONTROL":
 			console.log("Controlling entity", cmd[1])
 			targetId = cmd[1]
@@ -85,8 +360,10 @@ ws.onmessage = function(data) {
 			if (cmd[1] != targetId) {
 				e.x =  cmd[2]
 				e.y =  cmd[3]
-				e.xspeed = cmd[4]
-				e.yspeed = cmd[5] 
+				e.z =  cmd[4]
+				e.xspeed = cmd[5]
+				e.yspeed = cmd[6]
+				e.zspeed = cmd[7] 
 			}
 			break;
 		case "PING":
@@ -105,62 +382,134 @@ function lerp(a,b,r) { return a+(b-a)*r }
 function renderOtherPlayer(player, ratio) {
 	x = player.x - player.xspeed + player.xspeed * ratio
 	y = player.y - player.yspeed + player.yspeed * ratio
+	z = player.z - player.zspeed + player.zspeed * ratio
+
 	player.body.position.x = x
 	player.body.position.y = y
-	player.body.position.z = -3
+	player.body.position.z = z
 }
+
+camSmoothing = 4
 function renderPlayer(player, ratio) {
-	x = player.x - player.xspeed + player.xspeed * ratio
-	y = player.y - player.yspeed + player.yspeed * ratio
-	player.body.position.x = x
-	player.body.position.y = y
-	player.body.position.z = -3
-	camera.position.x = (camera.position.x*2+player.body.position.x)/3
-	camera.position.y = (camera.position.y*2+player.body.position.y+30)/3
-	camera.lookAt(player.body.position);
+	renderOtherPlayer(player,ratio)
+
+	// camFlip = 3*(worldW/2-player.body.position.x)/(worldW/2)
+	// console.log(camFlip)
+	// camera.position.x = (camera.position.x*camSmoothing+player.body.position.x)/(camSmoothing+1)
+	// camera.position.z = (camera.position.z*camSmoothing+player.body.position.z+camFlip)/(camSmoothing+1)
+
+	// camera.position.y = (camera.position.y*camSmoothing+player.body.position.y+3)/(camSmoothing+1)
+
+	// camera.up.set(0,1,0)
+	// camera.lookAt(player.body.position);
+}
+
+function worldCollides(player) {
+	sx = Math.floor(player.x-playerSize/2)
+	sy = Math.floor(player.y-playerSize/2)
+	sz = Math.floor(player.z-playerSize/2)
+	lx = Math.ceil(player.x+playerSize/2)
+	ly = Math.ceil(player.y+playerSize/2)
+	lz = Math.ceil(player.z+playerSize/2)
+	if (sx<0 || lx>=worldW || sz<0 || lz>=worldD) {
+		return true
+	}
+	if (sy<0 || ly>=worldH) return false
+	for(var ix=sx;ix<lx;ix+=1) {
+		for(var iy=sy;iy<ly;iy+=1)  {
+			for(var iz=sz;iz<lz;iz+=1)  {
+				type = level[ix][iy][iz]
+				if (type>0) return true;
+			}
+		}
+	}
+	return false;
+
+	// console.log(sx,sy,sz,lx,ly,lz)
+
 }
 
 function stepPlayer(player) {
 	player.x += player.xspeed
+	if (worldCollides(player)) {
+		player.y += .3
+		if (worldCollides(player)) {
+			player.y -= .3
+			player.x -= player.xspeed
+		}
+	}
+	player.z += player.zspeed
+	if (worldCollides(player)) {
+		player.y += .3
+		if (worldCollides(player)) {
+			player.y -= .3
+			player.z -= player.zspeed
+		}
+	}
+		player.yspeed += gravity
 	player.y += player.yspeed
+	if (worldCollides(player)) {
+		player.y -= player.yspeed
+		if (player.yspeed<0) player.grounded = true
+		player.yspeed = 0
+	} else {
+		player.grounded = false
+	}
+	
+	if (player.x<playerSize/2) {
+		player.x=playerSize/2 
+		player.xspeed = 0
+	}
+	if (player.x>worldW+1-playerSize/2) {
+		player.x = worldW+1-playerSize/2
+		player.xspeed = 0
+	}
+	if (player.z<playerSize/2) {
+		player.z=playerSize/2
+		player.zspeed = 0
+	}
+	if (player.z>worldD+1-playerSize/2) {
+		player.z = worldD+1-playerSize/2
+		
+	}
 
-	canvas = renderer.domElement;
-	if (target.x<3) {
-		target.x=3 
-		target.xspeed = 0
-	}
-	if (target.x>canvas.width-3) {
-		target.x = canvas.width-3
-		target.xspeed = 0
-	}
-	if (target.y<3) {
-		target.y=3
-		target.yspeed = 0
-	}
-	if (target.y>canvas.height-3) {
-		target.y = canvas.height-3
-		target.yspeed = 0
-	}
+
 }
 
 lastLogic = (new Date())
 renderStep = 0
 function render() {
 	renderStep += 1
-	camera.position.z = -50;
 
 	lerpAmount = ((new Date())-lastLogic)/40
 
+	if (targetId) {
+		ent = entities[targetId]
+		x = ent.x - ent.xspeed + ent.xspeed * lerpAmount
+		y = ent.y - ent.yspeed + ent.yspeed * lerpAmount
+		z = ent.z - ent.zspeed + ent.zspeed * lerpAmount
+
+		// camFlip = 3*(worldW/2-x)/(worldW/2)
+		camFlip = 3
+		camHeight = 3
+		camera.position.x = (camera.position.x*camSmoothing+x)/(camSmoothing+1)
+		camera.position.z = (camera.position.z*camSmoothing+z+camFlip)/(camSmoothing+1)
+		camera.position.y = (camera.position.y*camSmoothing+y+camHeight)/(camSmoothing+1)
+
+		camera.up.set(0,1,0)
+		camera.lookAt(ent.body.position);
+	}
+
 	for (var key in entities) {
-	  if (entities.hasOwnProperty(key)) {
-	    entities[key].render(entities[key], lerpAmount)
-	  }
+		if (entities.hasOwnProperty(key)) {
+		entities[key].render(entities[key], lerpAmount)
+		}
 	}
 
 	renderer.render(scene, camera);
 }
 
-keys = {up:false,down:false,left:false,right:false}
+keys = {up:false,down:false,left:false,right:false,jump:false}
 
 function logic() {
 	lastLogic = (new Date())
@@ -169,28 +518,34 @@ function logic() {
 
 		oldX = target.x
 		oldY = target.y
+		oldZ = target.z
 		oldXspeed = target.xspeed
 		oldYspeed = target.yspeed
+		oldZspeed = target.zspeed
 		target.xspeed *= friction
-		target.yspeed *= friction
+		target.zspeed *= friction
 		if (Math.abs(target.xspeed)<.01) target.xspeed=0
-		if (Math.abs(target.yspeed)<.01) target.yspeed=0
+		if (Math.abs(target.zspeed)<.01) target.zspeed=0
 
-		if (keys.up>0) target.yspeed = -speed
-		if (keys.down>0) target.yspeed = speed
+		if (keys.up>0) target.zspeed = -speed
+		if (keys.down>0) target.zspeed = speed
 		if (keys.left>0) target.xspeed = -speed
 		if (keys.right>0) target.xspeed = speed
+		if (keys.jump>0) {
+			if (target.grounded) target.yspeed = jumpHeight
+				else console.log(target.y)
+			}
 
 
-		if (target.x!=oldX || target.y!=oldY || target.xspeed!=oldXspeed || target.yspeed!=oldYspeed) {
-			dat = ["MOVE",targetId,target.x,target.y,target.xspeed, target.yspeed]
+		if (target.x!=oldX || target.z!=oldY || target.xspeed!=oldXspeed || target.yspeed!=oldYspeed || target.zspeed!=oldZspeed) {
+			dat = ["MOVE",targetId,target.x,target.y,target.z,target.xspeed,target.yspeed, target.zspeed]
 			ws.send(JSON.stringify(dat))
 		}
 	}
 	for (var key in entities) {
-	  if (entities.hasOwnProperty(key)) {
-	    entities[key].step(entities[key])
-	  }
+		if (entities.hasOwnProperty(key)) {
+		entities[key].step(entities[key])
+		}
 	}
 
 	if (keys.up==1) {
@@ -205,39 +560,45 @@ function logic() {
 	if (keys.right==1) {
 		keys.right = 0
 	}
+	if (keys.jump==1) {
+		keys.jump = 0
+	}
 
 }
 setInterval(logic,40);
 
 document.onkeydown = function(evt) {
-    evt = evt || window.event;
+	evt = evt || window.event;
 	console.log(evt.keyCode);
-    switch (evt.keyCode){
-    	case 37: case 65: keys.left = 2; break;
-    	case 39: case 68: keys.right = 2; break;
-    	case 38: case 87: keys.up = 2; break;
-    	case 40: case 83: keys.down = 2; break;
-    	default: return true;
-    }
-    return false;
+	switch (evt.keyCode){
+		case 37: case 65: keys.left = 2; break;
+		case 39: case 68: keys.right = 2; break;
+		case 38: case 87: keys.up = 2; break;
+		case 40: case 83: keys.down = 2; break;
+		case 32: keys.jump = 2; break;
+		default: return true;
+	}
+	return false;
 };
 
 document.onkeyup = function(evt) {
-    evt = evt || window.event;
+	evt = evt || window.event;
 	console.log(evt.keyCode);
-    switch (evt.keyCode){
-    	case 37: case 65: keys.left = 1; break;
-    	case 39: case 68: keys.right = 1; break;
-    	case 38: case 87: keys.up = 1; break;
-    	case 40: case 83: keys.down = 1; break;
-    	default: return true;
-    }
-    return false;
+	switch (evt.keyCode){
+		case 37: case 65: keys.left = 1; break;
+		case 39: case 68: keys.right = 1; break;
+		case 38: case 87: keys.up = 1; break;
+		case 40: case 83: keys.down = 1; break;
+		case 32: keys.jump = 1; break;
+		default: return true;
+	}
+	return false;
 };
 
 (function animloop(){
-  window.requestAnimationFrame(animloop);
-  render();
+	window.requestAnimationFrame(animloop);
+	render();
 })();
 
 </script>
+</body>
