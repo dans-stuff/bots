@@ -103,18 +103,18 @@ function renderWorld() {
 						face.normal.copy(west)
 						geoLevel.faces.push(face);
 						geoLevel.faceVertexUvs[0].push([
-							uvVecs[blockSide]["tl"],
-							uvVecs[blockSide]["tr"],
-							uvVecs[blockSide]["bl"]]);
+							uvVecs[blockSide]["bl"],
+							uvVecs[blockSide]["br"],
+							uvVecs[blockSide]["tl"]]);
 
 						face = new THREE.Face3(pos+1, pos+2, pos+3)
 						face.color = lumMedium
 						face.normal.copy(west)
 						geoLevel.faces.push(face);
 						geoLevel.faceVertexUvs[0].push([
-							uvVecs[blockSide]["bl"],
-							uvVecs[blockSide]["tr"],
-							uvVecs[blockSide]["br"]]);
+							uvVecs[blockSide]["tl"],
+							uvVecs[blockSide]["br"],
+							uvVecs[blockSide]["tr"]]);
 
 						// make west face
 					}
